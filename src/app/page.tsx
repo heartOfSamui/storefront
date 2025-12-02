@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
-import { DefaultChannelSlug } from "@/app/config";
+
+export const dynamic = 'force-dynamic';
 
 export default function EmptyPage() {
-	redirect(`/${DefaultChannelSlug}`);
+	const defaultChannel = process.env.NEXT_PUBLIC_DEFAULT_CHANNEL || 'hos';
+	redirect(`/${defaultChannel}`);
 };

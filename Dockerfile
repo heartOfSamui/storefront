@@ -17,6 +17,8 @@ RUN pnpm i --frozen-lockfile --prefer-offline
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
+# Force cache invalidation: update this comment when code changes
+# Last updated: 2025-12-01
 COPY . .
 
 # Next.js collects completely anonymous telemetry data about general usage.
@@ -26,18 +28,31 @@ COPY . .
 
 ENV NEXT_OUTPUT=standalone
 ARG NEXT_PUBLIC_SALEOR_API_URL
-ENV NEXT_PUBLIC_SALEOR_API_URL=${NEXT_PUBLIC_SALEOR_API_URL}
 ARG NEXT_PUBLIC_STOREFRONT_URL
-ENV NEXT_PUBLIC_STOREFRONT_URL=${NEXT_PUBLIC_STOREFRONT_URL}
 ARG NEXT_PUBLIC_DEFAULT_CHANNEL
-ENV NEXT_PUBLIC_DEFAULT_CHANNEL=${NEXT_PUBLIC_DEFAULT_CHANNEL}
+ARG PUBLIC_API_URL
 
 # Get PNPM version from package.json
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable
 
-RUN pnpm build
+# For GraphQL codegen during build, use public API URL if NEXT_PUBLIC_SALEOR_API_URL points to internal hostname
+# Replace internal hostnames with public URL for codegen, then set env vars and build
+# PUBLIC_API_URL is passed as build arg from docker-compose.yml (reads from .env file) to avoid hardcoding URLs in public repo
+RUN if [ -n "$NEXT_PUBLIC_SALEOR_API_URL" ] && [ -n "$PUBLIC_API_URL" ]; then \
+        API_URL_BUILD=$(echo "$NEXT_PUBLIC_SALEOR_API_URL" | \
+            sed "s|http://api:8000|${PUBLIC_API_URL}|g" | \
+            sed "s|http://dev-saleor-api:8000|${PUBLIC_API_URL}|g" | \
+            sed "s|http://api|${PUBLIC_API_URL}|g"); \
+        export NEXT_PUBLIC_SALEOR_API_URL="$API_URL_BUILD"; \
+    elif [ -n "$NEXT_PUBLIC_SALEOR_API_URL" ]; then \
+        echo "Warning: PUBLIC_API_URL not set, graphql-codegen may fail if NEXT_PUBLIC_SALEOR_API_URL points to internal hostname"; \
+        export NEXT_PUBLIC_SALEOR_API_URL="$NEXT_PUBLIC_SALEOR_API_URL"; \
+    fi && \
+    export NEXT_PUBLIC_STOREFRONT_URL="$NEXT_PUBLIC_STOREFRONT_URL" && \
+    export NEXT_PUBLIC_DEFAULT_CHANNEL="$NEXT_PUBLIC_DEFAULT_CHANNEL" && \
+    pnpm build
 
 # Production image, copy all the files and run next
 FROM base AS runner
@@ -46,6 +61,10 @@ WORKDIR /app
 ENV NODE_ENV production
 # Uncomment the following line in case you want to disable telemetry during runtime.
 # ENV NEXT_TELEMETRY_DISABLED 1
+
+# Make Next.js listen on all interfaces (required for Docker/Traefik)
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
 
 ARG NEXT_PUBLIC_SALEOR_API_URL
 ENV NEXT_PUBLIC_SALEOR_API_URL=${NEXT_PUBLIC_SALEOR_API_URL}
@@ -68,5 +87,6 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
 
+EXPOSE 3000
 
 CMD ["node", "server.js"]

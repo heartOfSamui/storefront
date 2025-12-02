@@ -5,6 +5,8 @@ import { Pagination } from "@/ui/components/Pagination";
 import { ProductList } from "@/ui/components/ProductList";
 import { getPaginatedListVariables } from "@/lib/utils";
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
 	title: "Products · Saleor Storefront example",
 	description: "All products in Saleor Storefront example",

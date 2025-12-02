@@ -2,6 +2,8 @@ import { ProductListByCollectionDocument } from "@/gql/graphql";
 import { executeGraphQL } from "@/lib/graphql";
 import { ProductList } from "@/ui/components/ProductList";
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
 	title: "ACME Storefront, powered by Saleor & Next.js",
 	description:
